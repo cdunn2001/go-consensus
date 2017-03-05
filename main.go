@@ -108,7 +108,7 @@ type SeqDatum struct {
 func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum {
 	const max_len = 100000
 	var data []SeqDatum
-	var seqs []NtSlice
+	seqs := make([]NtSlice, 0)
 	seed_id := -1
 	seed_len := 0
 	read_cov := 0
@@ -138,8 +138,7 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 				}
 				data = append(data, datum)
 			}
-			//seqs_data.append( (seqs, seed_id) )
-			seqs = seqs[:0] // delay immediate garbage-collection
+			seqs = make([]NtSlice, 0)
 			read_ids = make(map[int]bool)
 			seed_id = -1
 			read_cov = 0
