@@ -1,11 +1,11 @@
 go:
 	go build
-	./go-falcon
+	./go-consensus
 	${MAKE} test
 clean:
 	go clean
 uninstall:
-	rm -f ../../bin/go-falcon
+	rm -f ../../bin/go-consensus
 test:
 	make -C t/ new
 test-old:
