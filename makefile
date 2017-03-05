@@ -3,3 +3,5 @@ go:
 	./go-falcon
 clean:
 	go clean
+uninstall:
+	rm -f ../../bin/go-falcon
