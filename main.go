@@ -1,10 +1,16 @@
 package main
 
 //import "flag"
+import "bufio"
+
+//import "bytes"
+import "io"
 import "fmt"
 import "github.com/jessevdk/go-flags"
 import "os"
 import "sort"
+import "strconv"
+import "strings"
 
 func Use(vals ...interface{}) {
 	for _, val := range vals {
@@ -16,6 +22,12 @@ type NtSlice []byte
 
 func min(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+func max(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b
@@ -35,6 +47,8 @@ func get_longest_reads(seqs []NtSlice, max_n_read, max_cov_aln int) []NtSlice {
 		}
 		longest_n_reads = min(longest_n_reads, max_n_read)
 	}
+	// In Python, the slice is stopped at end. In Go, we must test.
+	longest_n_reads = min(longest_n_reads, len(seqs))
 	return seqs[:longest_n_reads]
 }
 
@@ -61,7 +75,141 @@ func get_consensus_with_trim(c_input int) (string, int) {
 }
 func get_consensus_without_trim(c_input int) (string, int) {
 	return "bye", 1
+	/*
+	   seqs, seed_id, config = c_input
+	   min_cov, K, max_n_read, min_idt, edge_tolerance, trim_size, min_cov_aln, max_cov_aln = config
+	   if len(seqs) > max_n_read:
+	       seqs = get_longest_reads(seqs, max_n_read, max_cov_aln, sort=True)
+	   seqs_ptr = (c_char_p * len(seqs))()
+	   seqs_ptr[:] = seqs
+	   consensus_data_ptr = falcon.generate_consensus( seqs_ptr, len(seqs), min_cov, K, min_idt )
+
+	   consensus = string_at(consensus_data_ptr[0].sequence)[:]
+	   eff_cov = consensus_data_ptr[0].eff_cov[:len(consensus)]
+	   falcon.free_consensus_data( consensus_data_ptr )
+	   del seqs_ptr
+	   return consensus, seed_id
+	*/
 }
+
+type SeqConfig struct {
+	K                                              int
+	min_cov, max_n_read, edge_tolerance, trim_size int
+	min_cov_aln, max_cov_aln                       int
+	min_idt                                        float32
+}
+
+func get_seq_data(config SeqConfig, min_n_read int, min_len_aln int) {
+	const max_len = 100000
+	var seqs []NtSlice
+	seed_id := -1
+	seed_len := 0
+	read_cov := 0
+	read_ids := make(map[int]bool)
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		text, err := reader.ReadString('\n') // err if no trailing newline
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			panic(err)
+		}
+		text = strings.TrimSpace(text)
+		if len(text) == 0 {
+			continue
+		}
+		start := text[0]
+		if start == '+' {
+			fmt.Println("+++", seed_len)
+			if len(seqs) >= min_n_read && read_cov/seed_len >= config.min_cov_aln {
+				seqs = get_longest_sorted_reads(seqs, config.max_n_read, config.max_cov_aln)
+				//yield (seqs, seed_id, config)
+			}
+			//seqs_data.append( (seqs, seed_id) )
+			seqs = seqs[:0] // delay immediate garbage-collection
+			read_ids = make(map[int]bool)
+			seed_id = -1
+			read_cov = 0
+		} else if start == '*' {
+			seqs = make([]NtSlice, 0)
+			read_ids = make(map[int]bool)
+			seed_id = -1
+			read_cov = 0
+		} else if start == '-' {
+			break
+		} else {
+			parts := strings.Fields(text)
+			if len(parts) != 2 {
+				panic(text) // unexpected
+			}
+			read_id, err := strconv.Atoi(parts[0])
+			if err != nil {
+				panic(err)
+			}
+			seq := NtSlice(parts[1])
+			fmt.Println(read_id, "->", len(seq))
+			if len(seq) >= min_len_aln {
+				if len(seqs) == 0 {
+					seqs = append(seqs, seq) //the "seed"
+					seed_len = len(seq)
+					seed_id = read_id
+				}
+				if _, ok := read_ids[read_id]; !ok {
+					//avoidng using the same read twice. seed is used again here by design
+					seqs = append(seqs, seq)
+					read_ids[read_id] = true
+					read_cov += len(seq)
+				}
+			}
+		}
+	}
+	Use(seed_id, seed_len, read_cov, read_ids)
+	fmt.Println("CHRIS")
+	fmt.Println(len(seqs))
+}
+
+/*
+def get_seq_data(config, min_n_read, min_len_aln):
+    with sys.stdin as f:
+        for l in f:
+            l = l.strip().split()
+            if len(l) != 2:
+                continue
+
+            read_id = l[0]
+            seq = l[1]
+            if len(seq) > max_len:
+                seq = seq[:max_len-1]
+
+            if read_id not in ("+", "-", "*"):
+                if len(seq) >= min_len_aln:
+                    if len(seqs) == 0:
+                        seqs.append(seq) #the "seed"
+                        seed_len = len(seq)
+                        seed_id = read_id
+                    if read_id not in read_ids: #avoidng using the same read twice. seed is used again here by design
+                        seqs.append(seq)
+                        read_ids.add(read_id)
+                        read_cov += len(seq)
+            elif l[0] == "+":
+                if len(seqs) >= min_n_read and read_cov//seed_len >= min_cov_aln:
+                    seqs = get_longest_reads(seqs, max_n_read, max_cov_aln, sort=True)
+                    yield (seqs, seed_id, config)
+                #seqs_data.append( (seqs, seed_id) )
+                seqs = []
+                read_ids = set()
+                seed_id = None
+                read_cov = 0
+            elif l[0] == "*":
+                seqs = []
+                read_ids = set()
+                seed_id = None
+                read_cov = 0
+            elif l[0] == "-":
+                #yield (seqs, seed_id)
+                #seqs_data.append( (seqs, seed_id) )
+                break
+*/
 func main() {
 	println("hello!")
 	var opts struct {
@@ -103,13 +251,7 @@ func main() {
 	K := 8
 	Use(get_consensus, K)
 	//config = args.min_cov, K, args.max_n_read, args.min_idt, args.edge_tolerance, args.trim_size, args.min_cov_aln, args.max_cov_aln
-	type SeqData struct {
-		K                                              int
-		min_cov, max_n_read, edge_tolerance, trim_size int
-		min_cov_aln, max_cov_aln                       int
-		min_idt                                        float32
-	}
-	config := SeqData{
+	config := SeqConfig{
 		K:              K,
 		min_cov:        opts.Min_cov,
 		max_n_read:     opts.Max_n_read,
@@ -119,6 +261,7 @@ func main() {
 		min_cov_aln:    opts.Min_cov_aln,
 		max_cov_aln:    opts.Max_cov_aln,
 	}
+	get_seq_data(config, 1, 2)
 	fmt.Println(config)
 	Use(config)
 }

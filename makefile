@@ -1,6 +1,6 @@
 go:
 	go build
-	./go-consensus
+	-./go-consensus -h
 	${MAKE} test
 clean:
 	go clean
