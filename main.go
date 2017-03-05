@@ -7,8 +7,6 @@ import "os"
 
 func main() {
 	println("hello!")
-	/*
-	 */
 	var opts struct {
 		N_core      int `long:"n_core" default:"24" description:"number of processes used for generating consensus; 0 for main process only"`
 		Min_cov     int `long:"min_cov" default:"6" description:"minimum coverage to break the consensus"`
@@ -29,9 +27,12 @@ func main() {
 		Trim_size      int     `long:"trim_size" default:"50" description:"the size for triming both ends from initial sparse aligned region"`
 	}
 	//args, err := flags.ParseArgs(&opts, os.Args)
-	args, err := flags.Parse(&opts)
+	//args, err := flags.Parse(&opts)
+	parser := flags.NewParser(&opts, flags.Default)
+	parser.Usage = "[OPTIONS]\n\nA simple multi-processor consensus sequence generator."
+	args, err := parser.Parse()
 	if err != nil {
-		panic(err)
+		//panic(err)
 		os.Exit(2)
 	}
 	fmt.Println(args, err)
