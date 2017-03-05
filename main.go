@@ -99,8 +99,15 @@ type SeqConfig struct {
 	min_idt                                        float32
 }
 
-func get_seq_data(config SeqConfig, min_n_read int, min_len_aln int) {
+type SeqDatum struct {
+	seqs    []NtSlice
+	seed_id int
+	config  *SeqConfig
+}
+
+func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum {
 	const max_len = 100000
+	var data []SeqDatum
 	var seqs []NtSlice
 	seed_id := -1
 	seed_len := 0
@@ -124,6 +131,12 @@ func get_seq_data(config SeqConfig, min_n_read int, min_len_aln int) {
 			if len(seqs) >= min_n_read && read_cov/seed_len >= config.min_cov_aln {
 				seqs = get_longest_sorted_reads(seqs, config.max_n_read, config.max_cov_aln)
 				//yield (seqs, seed_id, config)
+				datum := SeqDatum{
+					seqs:    seqs,
+					seed_id: seed_id,
+					config:  config,
+				}
+				data = append(data, datum)
 			}
 			//seqs_data.append( (seqs, seed_id) )
 			seqs = seqs[:0] // delay immediate garbage-collection
@@ -138,6 +151,9 @@ func get_seq_data(config SeqConfig, min_n_read int, min_len_aln int) {
 		} else if start == '-' {
 			break
 		} else {
+			if len(text) > max_len {
+				text = text[:max_len-1]
+			}
 			parts := strings.Fields(text)
 			if len(parts) != 2 {
 				panic(text) // unexpected
@@ -166,50 +182,9 @@ func get_seq_data(config SeqConfig, min_n_read int, min_len_aln int) {
 	Use(seed_id, seed_len, read_cov, read_ids)
 	fmt.Println("CHRIS")
 	fmt.Println(len(seqs))
+	return data
 }
 
-/*
-def get_seq_data(config, min_n_read, min_len_aln):
-    with sys.stdin as f:
-        for l in f:
-            l = l.strip().split()
-            if len(l) != 2:
-                continue
-
-            read_id = l[0]
-            seq = l[1]
-            if len(seq) > max_len:
-                seq = seq[:max_len-1]
-
-            if read_id not in ("+", "-", "*"):
-                if len(seq) >= min_len_aln:
-                    if len(seqs) == 0:
-                        seqs.append(seq) #the "seed"
-                        seed_len = len(seq)
-                        seed_id = read_id
-                    if read_id not in read_ids: #avoidng using the same read twice. seed is used again here by design
-                        seqs.append(seq)
-                        read_ids.add(read_id)
-                        read_cov += len(seq)
-            elif l[0] == "+":
-                if len(seqs) >= min_n_read and read_cov//seed_len >= min_cov_aln:
-                    seqs = get_longest_reads(seqs, max_n_read, max_cov_aln, sort=True)
-                    yield (seqs, seed_id, config)
-                #seqs_data.append( (seqs, seed_id) )
-                seqs = []
-                read_ids = set()
-                seed_id = None
-                read_cov = 0
-            elif l[0] == "*":
-                seqs = []
-                read_ids = set()
-                seed_id = None
-                read_cov = 0
-            elif l[0] == "-":
-                #yield (seqs, seed_id)
-                #seqs_data.append( (seqs, seed_id) )
-                break
-*/
 func main() {
 	println("hello!")
 	var opts struct {
@@ -261,7 +236,7 @@ func main() {
 		min_cov_aln:    opts.Min_cov_aln,
 		max_cov_aln:    opts.Max_cov_aln,
 	}
-	get_seq_data(config, 1, 2)
+	get_seq_data(&config, 1, 2)
 	fmt.Println(config)
 	Use(config)
 }
