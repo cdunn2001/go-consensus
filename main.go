@@ -260,7 +260,7 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int, data_ch ch
 		}
 		start := text[0]
 		if start == '+' {
-			fmt.Fprintf(os.Stderr, "+++ %d\n", seed_len)
+			//fmt.Fprintf(os.Stderr, "+++ %d\n", seed_len)
 			if len(seqs) >= min_n_read && read_cov/seed_len >= config.min_cov_aln {
 				seqs = get_longest_sorted_reads(seqs, config.max_n_read, config.max_cov_aln)
 				//yield (seqs, seed_id, config)
@@ -292,7 +292,7 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int, data_ch ch
 			}
 			read_id := parts[0]
 			seq := NtSlice(parts[1])
-			fmt.Fprintf(os.Stderr, "%s -> %d\n", read_id, len(seq))
+			//fmt.Fprintf(os.Stderr, "%s -> %d\n", read_id, len(seq))
 			if len(seq) >= min_len_aln {
 				if len(seqs) == 0 {
 					seqs = append(seqs, seq) //the "seed"
