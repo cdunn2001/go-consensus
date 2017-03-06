@@ -1,5 +1,15 @@
 package main
 
+/*
+#include "common.h"
+#include "foo.h"
+#include <stdio.h>
+void foo() {
+	puts("there");
+}
+*/
+import "C"
+
 //import "flag"
 import "bufio"
 
@@ -70,16 +80,20 @@ func get_longest_sorted_reads(seqs []NtSlice, max_n_read, max_cov_aln int) []NtS
 	sort.Sort(ByLongestNtSlice(my_seqs[1:n]))
 	return get_longest_reads(my_seqs, max_n_read, max_cov_aln)
 }
-func get_consensus_with_trim(c_input int) (string, int) {
+func get_consensus_with_trim(datum SeqDatum) (string, int) {
 	return "hi", 0
 }
-func get_consensus_without_trim(c_input int) (string, int) {
+func get_consensus_without_trim(datum SeqDatum) (string, int) {
+	seqs := datum.seqs
+	seed_id := datum.seed_id
+	config := datum.config
+	Use(seqs, seed_id, config)
+	if len(seqs) > config.max_n_read {
+		seqs = get_longest_sorted_reads(seqs, config.max_n_read, config.max_cov_aln)
+	}
+	//consensus_data_ptr = falcon.generate_consensus( seqs_ptr, len(seqs), min_cov, K, min_idt )
 	return "bye", 1
 	/*
-	   seqs, seed_id, config = c_input
-	   min_cov, K, max_n_read, min_idt, edge_tolerance, trim_size, min_cov_aln, max_cov_aln = config
-	   if len(seqs) > max_n_read:
-	       seqs = get_longest_reads(seqs, max_n_read, max_cov_aln, sort=True)
 	   seqs_ptr = (c_char_p * len(seqs))()
 	   seqs_ptr[:] = seqs
 	   consensus_data_ptr = falcon.generate_consensus( seqs_ptr, len(seqs), min_cov, K, min_idt )
@@ -185,6 +199,9 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 }
 
 func main() {
+	C.foo()
+	C.puts(C.CString("where"))
+	C.poo()
 	println("hello!")
 	var opts struct {
 		N_core      int `long:"n_core" default:"24" description:"number of processes used for generating consensus; 0 for main process only"`
@@ -215,7 +232,7 @@ func main() {
 		os.Exit(2)
 	}
 	fmt.Println(opts, args, err)
-	type GetConsensusFunc func(int) (string, int)
+	type GetConsensusFunc func(SeqDatum) (string, int)
 	var get_consensus GetConsensusFunc
 	if opts.Trim {
 		get_consensus = get_consensus_with_trim
@@ -235,7 +252,16 @@ func main() {
 		min_cov_aln:    opts.Min_cov_aln,
 		max_cov_aln:    opts.Max_cov_aln,
 	}
-	get_seq_data(&config, 1, 2)
 	fmt.Println(config)
-	Use(config)
+	data := get_seq_data(&config, 1, 2)
+	fmt.Println(len(data))
+	for _, datum := range data {
+		cns, seed_id := get_consensus(datum)
+		fmt.Println(len(cns), seed_id)
+		if len(cns) < 500 {
+			continue
+		}
+		/*
+		 */
+	}
 }
