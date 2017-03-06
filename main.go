@@ -397,39 +397,53 @@ func main() {
 	fmt.Fprintf(os.Stderr, "%v\n", config)
 	//fmt.Fprintf(os.Stderr, "len(data) %d\n", (len(data)))
 	//for _, datum := range data {
+	done_ch := make(chan bool)
+	write_ch := make(chan string)
+	go func() {
+		for blob := range write_ch {
+			fmt.Print(blob)
+		}
+		done_ch <- true
+	}()
 	for datum := range Get_seq_data(&config, 1, 2) {
-		cns, seed_id := get_consensus(datum)
-		println(len(cns), seed_id)
-		if len(cns) < 500 {
-			continue
-		}
-		if opts.Output_full {
-			fmt.Println(">", seed_id, "_f")
-			fmt.Println(cns)
-			continue
-		}
-		cns_goods := findall_good_regions(cns)
-		if len(cns_goods) == 0 {
-			continue
-		}
-		if opts.Output_multi {
-			seq_i := 0
-			for _, cns_seq := range cns_goods {
-				if len(cns_seq) < 500 {
-					continue
-				}
-				if seq_i >= 10 {
-					break
-				}
-				fmt.Printf(">prolog/%s%01d/%d_%d\n",
-					seed_id, seq_i, 0, len(cns_seq))
-				fmt.Println(format_seq(cns_seq, 80))
-				seq_i += 1
+		go func() {
+			cns, seed_id := get_consensus(datum)
+			//println(len(cns), seed_id)
+			if len(cns) < 500 {
+				return
 			}
-		} else {
-			sort.Sort(ByShortestString(cns_goods))
-			fmt.Printf(">%s\n", seed_id)
-			fmt.Println(cns[len(cns)-1])
-		}
+			if opts.Output_full {
+				result := fmt.Sprintf("> %s_f\n%s\n", seed_id, cns)
+				write_ch <- result
+				return
+			}
+			cns_goods := findall_good_regions(cns)
+			if len(cns_goods) == 0 {
+				return
+			}
+			if opts.Output_multi {
+				seq_i := 0
+				for _, cns_seq := range cns_goods {
+					if len(cns_seq) < 500 {
+						return
+					}
+					if seq_i >= 10 {
+						break
+					}
+					result := fmt.Sprintf(">prolog/%s%01d/%d_%d\n%s\n",
+						seed_id, seq_i, 0, len(cns_seq),
+						format_seq(cns_seq, 80),
+					)
+					write_ch <- result
+					seq_i += 1
+				}
+			} else {
+				sort.Sort(ByShortestString(cns_goods))
+				result := fmt.Sprintf(">%s\n%s\n", seed_id, cns[len(cns)-1])
+				write_ch <- result
+			}
+		}()
 	}
+	close(write_ch)
+	<-done_ch // Wait for writer to finish.
 }
