@@ -182,3 +182,8 @@ consensus_data * generate_consensus(
                            unsigned min_cov,
                            unsigned K,
                            double min_idt);
+
+aln_range* find_best_aln_range2(kmer_match * km_ptr,
+                                seq_coor_t K,
+                                seq_coor_t bin_width,
+                                seq_coor_t count_th);

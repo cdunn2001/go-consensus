@@ -34,7 +34,8 @@ func Use(vals ...interface{}) {
 	}
 }
 
-type NtSlice []byte
+//type NtSlice []byte
+type NtSlice string // since we have to convert to null-terminated c-array
 
 func min(a, b int) int {
 	if a < b {
@@ -125,63 +126,66 @@ func get_consensus_with_trim(datum SeqDatum) (string, string) {
 	return consensus, seed_id
 }
 func get_alignment(seq1 NtSlice, seq0 NtSlice, edge_tolerance int) (int, int, int, int, int, int, string) {
+	var K uint32 = 8
+	lk_ptr := C.allocate_kmer_lookup(C.seq_coor_t(1 << (K * 2)))
+	sa_ptr := C.allocate_seq(C.seq_coor_t(len(seq0)))
+	sda_ptr := C.allocate_seq_addr(C.seq_coor_t(len(seq0)))
+	cseq0 := C.CString(string(seq0))
+	cseq1 := C.CString(string(seq1))
+	defer C.free(unsafe.Pointer(cseq0))
+	defer C.free(unsafe.Pointer(cseq1))
+	C.add_sequence(0, C.uint(K), cseq0, C.seq_coor_t(len(seq0)), sda_ptr, sa_ptr, lk_ptr)
+	C.mask_k_mer(1<<(K*2), lk_ptr, 16)
+	kmer_match_ptr := C.find_kmer_pos_for_seq(cseq1, C.seq_coor_t(len(seq1)), C.uint(K), sda_ptr, lk_ptr)
+	defer C.free_kmer_match(kmer_match_ptr)
+	aln_range_ptr := C.find_best_aln_range2(kmer_match_ptr, C.seq_coor_t(K), C.seq_coor_t(K*50), 25)
+	defer C.free_aln_range(aln_range_ptr)
+	//x,y = zip( * [ (kmer_match.query_pos[i], kmer_match.target_pos[i]) for i in range(kmer_match.count )] )
+	cs1, ce1, cs0, ce0, km_score := aln_range_ptr.s1, aln_range_ptr.e1, aln_range_ptr.s2, aln_range_ptr.e2, aln_range_ptr.score
+	s0 := int(cs0)
+	s1 := int(cs1)
+	e0 := int(ce0)
+	e1 := int(ce1)
+	e1 += int(K + K/2)
+	e0 += int(K + K/2)
+	len_1 := len(seq1)
+	len_0 := len(seq0)
+	if e1 > len_1 {
+		e1 = len_1
+	}
+	if e0 > len_0 {
+		e0 = len_0
+	}
+	aln_size := 1
+	aln_score := -1
+	aln_q_s := -1
+	aln_q_e := -1
+	aln_t_s := -1
+	aln_t_e := -1
+	if e1-s1 > 500 {
+		aln_size = max(e1-s1, e0-s0)
+		aln_score = int(km_score * 48)
+		aln_q_s = s1
+		aln_q_e = e1
+		aln_t_s = s0
+		aln_t_e = e0
+	}
+
+	C.free_seq_addr_array(sda_ptr)
+	C.free_seq_array(sa_ptr)
+	C.free_kmer_lookup(lk_ptr)
+	if s1 > edge_tolerance && s0 > edge_tolerance {
+		return 0, 0, 0, 0, 0, 0, "none"
+	}
+	if len_1-e1 > edge_tolerance && len_0-e0 > edge_tolerance {
+		return 0, 0, 0, 0, 0, 0, "none"
+	}
+
+	if e1-s1 > 500 && aln_size > 500 {
+		return s1, s1 + aln_q_e - aln_q_s, s0, s0 + aln_t_e - aln_t_s, aln_size, aln_score, "aln"
+	}
 	return 0, 0, 0, 0, 0, 0, "none"
 }
-
-/*
-def get_alignment(seq1, seq0, edge_tolerance = 1000):
-
-    kup = falcon_kit.kup
-    K = 8
-    lk_ptr = kup.allocate_kmer_lookup( 1 << (K * 2) )
-    sa_ptr = kup.allocate_seq( len(seq0) )
-    sda_ptr = kup.allocate_seq_addr( len(seq0) )
-    kup.add_sequence( 0, K, seq0, len(seq0), sda_ptr, sa_ptr, lk_ptr)
-
-    kup.mask_k_mer(1 << (K * 2), lk_ptr, 16)
-    kmer_match_ptr = kup.find_kmer_pos_for_seq(seq1, len(seq1), K, sda_ptr, lk_ptr)
-    kmer_match = kmer_match_ptr[0]
-    aln_range_ptr = kup.find_best_aln_range2(kmer_match_ptr, K, K*50, 25)
-    #x,y = zip( * [ (kmer_match.query_pos[i], kmer_match.target_pos[i]) for i in range(kmer_match.count )] )
-    aln_range = aln_range_ptr[0]
-    kup.free_kmer_match(kmer_match_ptr)
-    s1, e1, s0, e0, km_score = aln_range.s1, aln_range.e1, aln_range.s2, aln_range.e2, aln_range.score
-    e1 += K + K/2
-    e0 += K + K/2
-    kup.free_aln_range(aln_range)
-    len_1 = len(seq1)
-    len_0 = len(seq0)
-    if e1 > len_1:
-        e1 = len_1
-    if e0 > len_0:
-        e0 = len_0
-
-    aln_size = 1
-    if e1 - s1 > 500:
-
-        aln_size = max( e1-s1, e0-s0 )
-        aln_score = int(km_score * 48)
-        aln_q_s = s1
-        aln_q_e = e1
-        aln_t_s = s0
-        aln_t_e = e0
-
-    kup.free_seq_addr_array(sda_ptr)
-    kup.free_seq_array(sa_ptr)
-    kup.free_kmer_lookup(lk_ptr)
-
-    if s1 > edge_tolerance and s0 > edge_tolerance:
-        return 0, 0, 0, 0, 0, 0, "none"
-
-    if len_1 - e1 > edge_tolerance and len_0 - e0 > edge_tolerance:
-        return 0, 0, 0, 0, 0, 0, "none"
-
-
-    if e1 - s1 > 500 and aln_size > 500:
-        return s1, s1+aln_q_e-aln_q_s, s0, s0+aln_t_e-aln_t_s, aln_size, aln_score, "aln"
-    else:
-        return 0, 0, 0, 0, 0, 0, "none"
-*/
 func copy_seq_ptrs(seqs []NtSlice) []*C.char {
 	result := make([]*C.char, len(seqs))
 	for i, seq := range seqs {
