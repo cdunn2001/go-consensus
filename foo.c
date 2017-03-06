@@ -1,4 +1,4 @@
 #include <stdio.h>
 void poo() {
-  puts("poop");
+  fputs("poop\n", stderr);
 }

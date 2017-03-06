@@ -6,7 +6,7 @@ package main
 #include <stdio.h>
 #include <stdlib.h>
 void foo() {
-	puts("there");
+	fputs("there\n", stderr);
 }
 */
 import "C"
@@ -106,26 +106,16 @@ func get_consensus_without_trim(datum SeqDatum) (string, int) {
 	if len(seqs) > config.max_n_read {
 		seqs = get_longest_sorted_reads(seqs, config.max_n_read, config.max_cov_aln)
 	}
-	var cseqs []*C.char = copy_seq_ptrs(seqs)
-	C.generate_consensus(&cseqs[0],
+	cseqs := copy_seq_ptrs(seqs)
+	consensus_data_ptr := C.generate_consensus(&cseqs[0],
 		C.uint(len(seqs)),
 		C.uint(config.min_cov),
 		C.uint(config.K),
 		C.double(config.min_idt))
 	free_seq_ptrs(cseqs)
-	//consensus_data_ptr = falcon.generate_consensus( seqs_ptr, len(seqs), min_cov, K, min_idt )
-	return "bye", 1
-	/*
-	   seqs_ptr = (c_char_p * len(seqs))()
-	   seqs_ptr[:] = seqs
-	   consensus_data_ptr = falcon.generate_consensus( seqs_ptr, len(seqs), min_cov, K, min_idt )
-
-	   consensus = string_at(consensus_data_ptr[0].sequence)[:]
-	   eff_cov = consensus_data_ptr[0].eff_cov[:len(consensus)]
-	   falcon.free_consensus_data( consensus_data_ptr )
-	   del seqs_ptr
-	   return consensus, seed_id
-	*/
+	consensus := C.GoString(consensus_data_ptr.sequence)
+	C.free_consensus_data(consensus_data_ptr)
+	return consensus, seed_id
 }
 
 type SeqConfig struct {
@@ -198,7 +188,7 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 				panic(err)
 			}
 			seq := NtSlice(parts[1])
-			fmt.Println(read_id, "->", len(seq))
+			fmt.Fprintln(os.Stderr, read_id, "->", len(seq))
 			if len(seq) >= min_len_aln {
 				if len(seqs) == 0 {
 					seqs = append(seqs, seq) //the "seed"
@@ -215,14 +205,33 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 		}
 	}
 	Use(seed_id, seed_len, read_cov, read_ids)
-	fmt.Println("CHRIS")
-	fmt.Println(len(seqs))
+	fmt.Fprintln(os.Stderr, "CHRIS")
+	fmt.Fprintln(os.Stderr, len(seqs))
 	return data
 }
 
+func format_seq(seq string, col int) string {
+	//return "\n".join( [ seq[i:(i+col)] for i in xrange(0, len(seq), col) ] )
+	return seq
+}
+func findall_good_regions(cns string) []string {
+	return []string{cns}
+}
+
+type ByShortestString []string
+
+func (slice ByShortestString) Len() int {
+	return len(slice)
+}
+func (slice ByShortestString) Less(i, j int) bool {
+	return len(slice[i]) < len(slice[j])
+}
+func (slice ByShortestString) Swap(i, j int) {
+	slice[i], slice[j] = slice[j], slice[i]
+}
 func main() {
+	C.fputs(C.CString("In main()\n"), C.stderr)
 	C.foo()
-	C.puts(C.CString("where"))
 	C.poo()
 	println("hello!")
 	var opts struct {
@@ -253,7 +262,8 @@ func main() {
 		//panic(err)
 		os.Exit(2)
 	}
-	fmt.Println(opts, args, err)
+	fmt.Fprintf(os.Stderr, "%v %v %v\n", opts, args, err)
+	//fmt.Println(opts, args, err)
 	type GetConsensusFunc func(SeqDatum) (string, int)
 	var get_consensus GetConsensusFunc
 	if opts.Trim {
@@ -274,16 +284,41 @@ func main() {
 		min_cov_aln:    opts.Min_cov_aln,
 		max_cov_aln:    opts.Max_cov_aln,
 	}
-	fmt.Println(config)
+	fmt.Fprintf(os.Stderr, "%v", config)
 	data := get_seq_data(&config, 1, 2)
-	fmt.Println(len(data))
+	println(len(data))
 	for _, datum := range data {
 		cns, seed_id := get_consensus(datum)
-		fmt.Println(len(cns), seed_id)
+		println(len(cns), seed_id)
 		if len(cns) < 500 {
 			continue
 		}
-		/*
-		 */
+		if opts.Output_full {
+			fmt.Println(">", seed_id, "_f")
+			fmt.Println(cns)
+			continue
+		}
+		cns_goods := findall_good_regions(cns)
+		if len(cns_goods) == 0 {
+			continue
+		}
+		if opts.Output_multi {
+			seq_i := 0
+			for _, cns_seq := range cns_goods {
+				if len(cns_seq) < 500 {
+					continue
+				}
+				if seq_i >= 10 {
+					break
+				}
+				//fmt.Println(">prolog/%s%01d/%d_%d" % (seed_id, seq_i, 0, len(cns_seq))
+				fmt.Println(format_seq(cns_seq, 80))
+				seq_i += 1
+			}
+		} else {
+			sort.Sort(ByShortestString(cns_goods))
+			fmt.Println(">", seed_id)
+			fmt.Println(cns[len(cns)-1])
+		}
 	}
 }
