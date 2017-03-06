@@ -13,6 +13,8 @@ import "C"
 
 import "unsafe"
 
+import "regexp"
+
 //import "flag"
 import "bufio"
 
@@ -222,7 +224,7 @@ func format_seq(seq string, col int) string {
 	return strings.Join(lines, "\n")
 }
 func findall_good_regions(cns string) []string {
-	return []string{cns}
+	return regexp.MustCompile("[ACGT]+").FindAllString(cns, -1)
 }
 
 type ByShortestString []string
