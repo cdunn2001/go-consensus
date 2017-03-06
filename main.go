@@ -87,8 +87,101 @@ func get_longest_sorted_reads(seqs []NtSlice, max_n_read, max_cov_aln int) []NtS
 	return get_longest_reads(my_seqs, max_n_read, max_cov_aln)
 }
 func get_consensus_with_trim(datum SeqDatum) (string, string) {
-	return "hi", ""
+	seqs := datum.seqs
+	seed_id := datum.seed_id
+	config := datum.config
+	Use(seqs, seed_id, config)
+	trim_seqs := make([]NtSlice, 0)
+	seed := seqs[0]
+	trim_seqs = append(trim_seqs, seed)
+	for _, seq := range seqs[1:] {
+		s1, e1, s2, e2, aln_size, aln_score, c_status := get_alignment(seq, seed, config.edge_tolerance)
+		Use(s2, e2, aln_size)
+		if c_status == "none" {
+			continue
+		}
+		if (aln_score > 1000) && (e1-s1 > 500) {
+			e1 -= config.trim_size
+			s1 += config.trim_size
+			//trim_seqs.append( (e1-s1, seq[s1:e1]) )
+			// We do not need (e1-s1) because that is len(seq[s1:e1])
+			trim_seqs = append(trim_seqs, seq[s1:e1])
+		}
+	}
+	sort.Sort(ByLongestNtSlice(trim_seqs[1:len(trim_seqs)]))
+	if len(trim_seqs[1:]) > config.max_n_read { // Is this correct? -cdunn
+		// seqs already sorted, dont' sort again -- jason
+		trim_seqs = get_longest_reads(trim_seqs, config.max_n_read, config.max_cov_aln)
+	}
+	cseqs := copy_seq_ptrs(trim_seqs)
+	consensus_data_ptr := C.generate_consensus(&cseqs[0],
+		C.uint(len(trim_seqs)),
+		C.uint(config.min_cov),
+		C.uint(config.K),
+		C.double(config.min_idt))
+	free_seq_ptrs(cseqs)
+	consensus := C.GoString(consensus_data_ptr.sequence)
+	C.free_consensus_data(consensus_data_ptr)
+	return consensus, seed_id
 }
+func get_alignment(seq1 NtSlice, seq0 NtSlice, edge_tolerance int) (int, int, int, int, int, int, string) {
+	return 0, 0, 0, 0, 0, 0, "none"
+}
+
+/*
+def get_alignment(seq1, seq0, edge_tolerance = 1000):
+
+    kup = falcon_kit.kup
+    K = 8
+    lk_ptr = kup.allocate_kmer_lookup( 1 << (K * 2) )
+    sa_ptr = kup.allocate_seq( len(seq0) )
+    sda_ptr = kup.allocate_seq_addr( len(seq0) )
+    kup.add_sequence( 0, K, seq0, len(seq0), sda_ptr, sa_ptr, lk_ptr)
+
+    kup.mask_k_mer(1 << (K * 2), lk_ptr, 16)
+    kmer_match_ptr = kup.find_kmer_pos_for_seq(seq1, len(seq1), K, sda_ptr, lk_ptr)
+    kmer_match = kmer_match_ptr[0]
+    aln_range_ptr = kup.find_best_aln_range2(kmer_match_ptr, K, K*50, 25)
+    #x,y = zip( * [ (kmer_match.query_pos[i], kmer_match.target_pos[i]) for i in range(kmer_match.count )] )
+    aln_range = aln_range_ptr[0]
+    kup.free_kmer_match(kmer_match_ptr)
+    s1, e1, s0, e0, km_score = aln_range.s1, aln_range.e1, aln_range.s2, aln_range.e2, aln_range.score
+    e1 += K + K/2
+    e0 += K + K/2
+    kup.free_aln_range(aln_range)
+    len_1 = len(seq1)
+    len_0 = len(seq0)
+    if e1 > len_1:
+        e1 = len_1
+    if e0 > len_0:
+        e0 = len_0
+
+    aln_size = 1
+    if e1 - s1 > 500:
+
+        aln_size = max( e1-s1, e0-s0 )
+        aln_score = int(km_score * 48)
+        aln_q_s = s1
+        aln_q_e = e1
+        aln_t_s = s0
+        aln_t_e = e0
+
+    kup.free_seq_addr_array(sda_ptr)
+    kup.free_seq_array(sa_ptr)
+    kup.free_kmer_lookup(lk_ptr)
+
+    if s1 > edge_tolerance and s0 > edge_tolerance:
+        return 0, 0, 0, 0, 0, 0, "none"
+
+    if len_1 - e1 > edge_tolerance and len_0 - e0 > edge_tolerance:
+        return 0, 0, 0, 0, 0, 0, "none"
+
+
+    if e1 - s1 > 500 and aln_size > 500:
+        return s1, s1+aln_q_e-aln_q_s, s0, s0+aln_t_e-aln_t_s, aln_size, aln_score, "aln"
+    else:
+        return 0, 0, 0, 0, 0, 0, "none"
+*/
 func copy_seq_ptrs(seqs []NtSlice) []*C.char {
 	result := make([]*C.char, len(seqs))
 	for i, seq := range seqs {
