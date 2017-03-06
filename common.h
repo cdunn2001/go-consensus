@@ -176,3 +176,9 @@ void free_alignment(alignment *);
 
 void free_consensus_data(consensus_data *);
 
+consensus_data * generate_consensus(
+                           char ** input_seq,
+                           unsigned int n_seq,
+                           unsigned min_cov,
+                           unsigned K,
+                           double min_idt);

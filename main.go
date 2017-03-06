@@ -4,11 +4,14 @@ package main
 #include "common.h"
 #include "foo.h"
 #include <stdio.h>
+#include <stdlib.h>
 void foo() {
 	puts("there");
 }
 */
 import "C"
+
+import "unsafe"
 
 //import "flag"
 import "bufio"
@@ -83,6 +86,18 @@ func get_longest_sorted_reads(seqs []NtSlice, max_n_read, max_cov_aln int) []NtS
 func get_consensus_with_trim(datum SeqDatum) (string, int) {
 	return "hi", 0
 }
+func copy_seq_ptrs(seqs []NtSlice) []*C.char {
+	result := make([]*C.char, len(seqs))
+	for i, seq := range seqs {
+		result[i] = (*C.char)(C.CBytes(seq))
+	}
+	return result
+}
+func free_seq_ptrs(cseqs []*C.char) {
+	for _, cseq := range cseqs {
+		C.free(unsafe.Pointer(cseq))
+	}
+}
 func get_consensus_without_trim(datum SeqDatum) (string, int) {
 	seqs := datum.seqs
 	seed_id := datum.seed_id
@@ -91,6 +106,13 @@ func get_consensus_without_trim(datum SeqDatum) (string, int) {
 	if len(seqs) > config.max_n_read {
 		seqs = get_longest_sorted_reads(seqs, config.max_n_read, config.max_cov_aln)
 	}
+	var cseqs []*C.char = copy_seq_ptrs(seqs)
+	C.generate_consensus(&cseqs[0],
+		C.uint(len(seqs)),
+		C.uint(config.min_cov),
+		C.uint(config.K),
+		C.double(config.min_idt))
+	free_seq_ptrs(cseqs)
 	//consensus_data_ptr = falcon.generate_consensus( seqs_ptr, len(seqs), min_cov, K, min_idt )
 	return "bye", 1
 	/*
