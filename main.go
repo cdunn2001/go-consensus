@@ -92,7 +92,7 @@ func get_consensus_with_trim(datum SeqDatum) (string, string) {
 func copy_seq_ptrs(seqs []NtSlice) []*C.char {
 	result := make([]*C.char, len(seqs))
 	for i, seq := range seqs {
-		result[i] = (*C.char)(C.CBytes(seq))
+		result[i] = (*C.char)(C.CString(string(seq)))
 	}
 	return result
 }
