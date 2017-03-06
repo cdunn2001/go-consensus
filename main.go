@@ -14,6 +14,7 @@ import "C"
 import "unsafe"
 
 import "regexp"
+import "sync"
 
 //import "flag"
 import "bufio"
@@ -405,8 +406,14 @@ func main() {
 		}
 		done_ch <- true
 	}()
+	var wg sync.WaitGroup
 	for datum := range Get_seq_data(&config, 1, 2) {
 		go func() {
+			//defer wg.Done()
+			defer func() {
+				println("Done")
+				wg.Done()
+			}()
 			cns, seed_id := get_consensus(datum)
 			//println(len(cns), seed_id)
 			if len(cns) < 500 {
@@ -443,7 +450,11 @@ func main() {
 				write_ch <- result
 			}
 		}()
+		wg.Add(1)
+		println("Added")
 	}
+	println("Waiting...")
+	wg.Wait()
 	close(write_ch)
 	<-done_ch // Wait for writer to finish.
 }
