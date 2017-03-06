@@ -231,9 +231,16 @@ type SeqDatum struct {
 	config  *SeqConfig
 }
 
-func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum {
+func Get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) <-chan SeqDatum {
+	data_ch := make(chan SeqDatum) // xfer whole seq
+	go func() {
+		get_seq_data(config, min_n_read, min_len_aln, data_ch)
+		close(data_ch)
+	}()
+	return data_ch
+}
+func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int, data_ch chan SeqDatum) {
 	const max_len = 100000
-	var data []SeqDatum
 	seqs := make([]NtSlice, 0)
 	seed_id := ""
 	seed_len := 0
@@ -262,7 +269,7 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 					seed_id: seed_id,
 					config:  config,
 				}
-				data = append(data, datum)
+				data_ch <- datum
 			}
 			seqs = make([]NtSlice, 0)
 			read_ids = make(map[string]bool)
@@ -304,7 +311,6 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 	Use(seed_id, seed_len, read_cov, read_ids)
 	fmt.Fprintln(os.Stderr, "CHRIS")
 	fmt.Fprintln(os.Stderr, "len(seqs)", len(seqs))
-	return data
 }
 
 func format_seq(seq string, col int) string {
@@ -389,9 +395,9 @@ func main() {
 		max_cov_aln:    opts.Max_cov_aln,
 	}
 	fmt.Fprintf(os.Stderr, "%v\n", config)
-	data := get_seq_data(&config, 1, 2)
-	fmt.Fprintf(os.Stderr, "len(data) %d\n", (len(data)))
-	for _, datum := range data {
+	//fmt.Fprintf(os.Stderr, "len(data) %d\n", (len(data)))
+	//for _, datum := range data {
+	for datum := range Get_seq_data(&config, 1, 2) {
 		cns, seed_id := get_consensus(datum)
 		println(len(cns), seed_id)
 		if len(cns) < 500 {
