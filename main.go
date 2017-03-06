@@ -24,7 +24,8 @@ import "fmt"
 import "github.com/jessevdk/go-flags"
 import "os"
 import "sort"
-import "strconv"
+
+//import "strconv"
 import "strings"
 
 func Use(vals ...interface{}) {
@@ -85,8 +86,8 @@ func get_longest_sorted_reads(seqs []NtSlice, max_n_read, max_cov_aln int) []NtS
 	sort.Sort(ByLongestNtSlice(my_seqs[1:n]))
 	return get_longest_reads(my_seqs, max_n_read, max_cov_aln)
 }
-func get_consensus_with_trim(datum SeqDatum) (string, int) {
-	return "hi", 0
+func get_consensus_with_trim(datum SeqDatum) (string, string) {
+	return "hi", ""
 }
 func copy_seq_ptrs(seqs []NtSlice) []*C.char {
 	result := make([]*C.char, len(seqs))
@@ -100,7 +101,7 @@ func free_seq_ptrs(cseqs []*C.char) {
 		C.free(unsafe.Pointer(cseq))
 	}
 }
-func get_consensus_without_trim(datum SeqDatum) (string, int) {
+func get_consensus_without_trim(datum SeqDatum) (string, string) {
 	seqs := datum.seqs
 	seed_id := datum.seed_id
 	config := datum.config
@@ -129,7 +130,7 @@ type SeqConfig struct {
 
 type SeqDatum struct {
 	seqs    []NtSlice
-	seed_id int
+	seed_id string
 	config  *SeqConfig
 }
 
@@ -137,10 +138,10 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 	const max_len = 100000
 	var data []SeqDatum
 	seqs := make([]NtSlice, 0)
-	seed_id := -1
+	seed_id := ""
 	seed_len := 0
 	read_cov := 0
-	read_ids := make(map[int]bool)
+	read_ids := make(map[string]bool)
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		text, err := reader.ReadString('\n') // err if no trailing newline
@@ -167,13 +168,13 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 				data = append(data, datum)
 			}
 			seqs = make([]NtSlice, 0)
-			read_ids = make(map[int]bool)
-			seed_id = -1
+			read_ids = make(map[string]bool)
+			seed_id = ""
 			read_cov = 0
 		} else if start == '*' {
 			seqs = make([]NtSlice, 0)
-			read_ids = make(map[int]bool)
-			seed_id = -1
+			read_ids = make(map[string]bool)
+			seed_id = ""
 			read_cov = 0
 		} else if start == '-' {
 			break
@@ -185,12 +186,9 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 			if len(parts) != 2 {
 				panic(text) // unexpected
 			}
-			read_id, err := strconv.Atoi(parts[0])
-			if err != nil {
-				panic(err)
-			}
+			read_id := parts[0]
 			seq := NtSlice(parts[1])
-			fmt.Fprintf(os.Stderr, "%d -> %d\n", read_id, len(seq))
+			fmt.Fprintf(os.Stderr, "%s -> %d\n", read_id, len(seq))
 			if len(seq) >= min_len_aln {
 				if len(seqs) == 0 {
 					seqs = append(seqs, seq) //the "seed"
@@ -273,7 +271,7 @@ func main() {
 	}
 	fmt.Fprintf(os.Stderr, "%v %v %v\n", opts, args, err)
 	//fmt.Println(opts, args, err)
-	type GetConsensusFunc func(SeqDatum) (string, int)
+	type GetConsensusFunc func(SeqDatum) (string, string)
 	var get_consensus GetConsensusFunc
 	if opts.Trim {
 		get_consensus = get_consensus_with_trim
@@ -320,14 +318,14 @@ func main() {
 				if seq_i >= 10 {
 					break
 				}
-				fmt.Printf(">prolog/%08d%01d/%d_%d\n",
+				fmt.Printf(">prolog/%s%01d/%d_%d\n",
 					seed_id, seq_i, 0, len(cns_seq))
 				fmt.Println(format_seq(cns_seq, 80))
 				seq_i += 1
 			}
 		} else {
 			sort.Sort(ByShortestString(cns_goods))
-			fmt.Printf(">%d\n", seed_id)
+			fmt.Printf(">%s\n", seed_id)
 			fmt.Println(cns[len(cns)-1])
 		}
 	}
