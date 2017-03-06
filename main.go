@@ -406,7 +406,7 @@ func main() {
 		done_ch <- true
 	}()
 	for datum := range Get_seq_data(&config, 1, 2) {
-		go func() {
+		{
 			cns, seed_id := get_consensus(datum)
 			//println(len(cns), seed_id)
 			if len(cns) < 500 {
@@ -442,7 +442,7 @@ func main() {
 				result := fmt.Sprintf(">%s\n%s\n", seed_id, cns[len(cns)-1])
 				write_ch <- result
 			}
-		}()
+		}
 	}
 	close(write_ch)
 	<-done_ch // Wait for writer to finish.
