@@ -1,7 +1,10 @@
 go:
-	go build
 	-./go-consensus -h
 	${MAKE} test
+cgo:
+	go tool cgo main.go
+build:
+	go build
 clean:
 	go clean
 uninstall:
