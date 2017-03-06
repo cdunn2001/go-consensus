@@ -153,7 +153,7 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 		}
 		start := text[0]
 		if start == '+' {
-			fmt.Println("+++", seed_len)
+			fmt.Fprintf(os.Stderr, "+++ %d\n", seed_len)
 			if len(seqs) >= min_n_read && read_cov/seed_len >= config.min_cov_aln {
 				seqs = get_longest_sorted_reads(seqs, config.max_n_read, config.max_cov_aln)
 				//yield (seqs, seed_id, config)
@@ -188,7 +188,7 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 				panic(err)
 			}
 			seq := NtSlice(parts[1])
-			fmt.Fprintln(os.Stderr, read_id, "->", len(seq))
+			fmt.Fprintf(os.Stderr, "%d -> %d\n", read_id, len(seq))
 			if len(seq) >= min_len_aln {
 				if len(seqs) == 0 {
 					seqs = append(seqs, seq) //the "seed"
@@ -206,13 +206,20 @@ func get_seq_data(config *SeqConfig, min_n_read int, min_len_aln int) []SeqDatum
 	}
 	Use(seed_id, seed_len, read_cov, read_ids)
 	fmt.Fprintln(os.Stderr, "CHRIS")
-	fmt.Fprintln(os.Stderr, len(seqs))
+	fmt.Fprintln(os.Stderr, "len(seqs)", len(seqs))
 	return data
 }
 
 func format_seq(seq string, col int) string {
-	//return "\n".join( [ seq[i:(i+col)] for i in xrange(0, len(seq), col) ] )
-	return seq
+	lines := make([]string, 0)
+	for i := 0; i < len(seq); i += col {
+		bound := i + col
+		if bound > len(seq) {
+			bound = len(seq)
+		}
+		lines = append(lines, seq[i:bound])
+	}
+	return strings.Join(lines, "\n")
 }
 func findall_good_regions(cns string) []string {
 	return []string{cns}
@@ -284,9 +291,9 @@ func main() {
 		min_cov_aln:    opts.Min_cov_aln,
 		max_cov_aln:    opts.Max_cov_aln,
 	}
-	fmt.Fprintf(os.Stderr, "%v", config)
+	fmt.Fprintf(os.Stderr, "%v\n", config)
 	data := get_seq_data(&config, 1, 2)
-	println(len(data))
+	fmt.Fprintf(os.Stderr, "len(data) %d\n", (len(data)))
 	for _, datum := range data {
 		cns, seed_id := get_consensus(datum)
 		println(len(cns), seed_id)
@@ -311,13 +318,14 @@ func main() {
 				if seq_i >= 10 {
 					break
 				}
-				//fmt.Println(">prolog/%s%01d/%d_%d" % (seed_id, seq_i, 0, len(cns_seq))
+				fmt.Printf(">prolog/%08d%01d/%d_%d\n",
+					seed_id, seq_i, 0, len(cns_seq))
 				fmt.Println(format_seq(cns_seq, 80))
 				seq_i += 1
 			}
 		} else {
 			sort.Sort(ByShortestString(cns_goods))
-			fmt.Println(">", seed_id)
+			fmt.Printf(">%d\n", seed_id)
 			fmt.Println(cns[len(cns)-1])
 		}
 	}
